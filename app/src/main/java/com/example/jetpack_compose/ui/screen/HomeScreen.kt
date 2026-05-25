@@ -55,7 +55,7 @@ fun HomeScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         Row(modifier = Modifier.fillMaxWidth()) {
-            // Botón Reportar
+
             SmallActionButton(
                 title = "Reportar",
                 icon = Icons.Default.AddAlert,
