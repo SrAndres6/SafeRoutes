@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "490654456871",
+    "project_id": "saferoutesia",
+    "storage_bucket": "saferoutesia.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:490654456871:android:525e6a71777d26d3f40202",
+        "android_client_info": {
+          "package_name": "com.example.jetpack_compose"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCSxfRhhKWaZ2ET4X2khfliexa1d84icBY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

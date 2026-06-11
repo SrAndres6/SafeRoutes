@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import com.google.firebase.FirebaseApp
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.compose.NavHost
@@ -19,8 +20,33 @@ fun AppNavigation() {
 
     NavHost(
         navController = navController,
-        startDestination = HomeRoute
+        startDestination = LoginRoute // Empezamos por el Login
     ) {
+        // Pantalla de Login
+        composable<LoginRoute> {
+            LoginScreen(
+                onLoginSuccess = { 
+                    navController.navigate(HomeRoute) {
+                        popUpTo(LoginRoute) { inclusive = true } // Limpiar historial
+                    }
+                },
+                onNavigateToRegister = { navController.navigate(RegisterRoute) }
+            )
+        }
+
+        // Pantalla de Registro
+        composable<RegisterRoute> {
+            RegisterScreen(
+                onRegisterSuccess = { 
+                    navController.navigate(HomeRoute) {
+                        popUpTo(LoginRoute) { inclusive = true }
+                    }
+                },
+                onNavigateToLogin = { navController.popBackStack() }
+            )
+        }
+
+        // Pantalla Principal (Dashboard)
         composable<HomeRoute> {
             HomeScreen(
                 onNavigateToMap = { navController.navigate(MapRoute) },
@@ -35,12 +61,14 @@ fun AppNavigation() {
         }
 
         composable<MapRoute> {
-            // Placeholder del Mapa (Integración de Google Maps SDK requerida)
-            DetailScreen(
-                itemId = "Mapa",
-                title = "Navegación Segura",
-                onBack = { navController.popBackStack() }
+            MapScreen(
+                onBack = { navController.popBackStack() },
+                onNavigateToFriends = { navController.navigate(FriendsRoute) }
             )
+        }
+
+        composable<FriendsRoute> {
+            FriendsScreen(onBack = { navController.popBackStack() })
         }
 
         composable<ReportRoute> {
@@ -48,7 +76,6 @@ fun AppNavigation() {
         }
 
         composable<EmergencyRoute> {
-            // Acción SOS inmediata
             Toast.makeText(context, "¡ALERTA SOS ENVIADA!", Toast.LENGTH_LONG).show()
             navController.popBackStack()
         }
@@ -58,6 +85,7 @@ fun AppNavigation() {
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        FirebaseApp.initializeApp(this)
         setContent {
             Jetpack_composeTheme {
                 AppNavigation()
