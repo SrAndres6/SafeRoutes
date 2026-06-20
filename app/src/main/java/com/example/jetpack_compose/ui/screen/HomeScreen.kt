@@ -13,34 +13,20 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.jetpack_compose.data.model.User
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
+import com.example.jetpack_compose.data.model.SafeRoute
+import com.example.jetpack_compose.ui.homeViewModel
 
 @Composable
 fun HomeScreen(
     onNavigateToMap: () -> Unit,
     onNavigateToReport: () -> Unit,
     onNavigateToEmergency: () -> Unit,
-    onNavigateToProfile: () -> Unit
+    onNavigateToProfile: () -> Unit,
+    onNavigateToRoutes: () -> Unit,
+    onNavigateToRouteDetail: (String) -> Unit
 ) {
-    val auth = FirebaseAuth.getInstance()
-    val db = FirebaseFirestore.getInstance()
-    var userName by remember { mutableStateOf("...") }
-
-    // Cargar el nombre del usuario al entrar al Home
-    LaunchedEffect(Unit) {
-        val uid = auth.currentUser?.uid
-        if (uid != null) {
-            db.collection("users").document(uid).get()
-                .addOnSuccessListener { document ->
-                    if (document.exists()) {
-                        val user = document.toObject(User::class.java)
-                        userName = user?.name ?: "Usuario"
-                    }
-                }
-        }
-    }
+    val viewModel = homeViewModel()
+    val uiState by viewModel.uiState.collectAsState()
 
     Column(
         modifier = Modifier
@@ -49,39 +35,63 @@ fun HomeScreen(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Spacer(modifier = Modifier.height(20.dp))
-        
+
         Text(
-            text = "SafeRoute IA",
+            text = "SafeRoute",
             style = MaterialTheme.typography.headlineLarge,
             color = MaterialTheme.colorScheme.primary,
             fontWeight = FontWeight.Bold
         )
         Text(
-            text = "Bienvenido, $userName",
+            text = "Bienvenido, ${uiState.userName}",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold
         )
         Text(
-            text = "Navegación por Percepción de Seguridad",
+            text = "Rutas seguras para peatones, ciclistas y senderistas",
             style = MaterialTheme.typography.bodySmall,
             color = Color.Gray
         )
 
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
-        // Botón Principal: Iniciar Viaje Seguro
         LargeActionButton(
-            title = "Iniciar Viaje Seguro",
-            subtitle = "Rutas con mejor iluminación",
+            title = "Iniciar Viaje",
+            subtitle = "Calcula y navega tu ruta",
             icon = Icons.Default.DirectionsRun,
             color = MaterialTheme.colorScheme.primaryContainer,
             onClick = onNavigateToMap
         )
 
+        Spacer(modifier = Modifier.height(12.dp))
+
+        LargeActionButton(
+            title = "Explorar Rutas",
+            subtitle = "Rutas recomendadas por la comunidad",
+            icon = Icons.Default.Route,
+            color = MaterialTheme.colorScheme.secondaryContainer,
+            onClick = onNavigateToRoutes
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        if (uiState.topRoutes.isNotEmpty()) {
+            Text(
+                "Rutas mejor valoradas",
+                modifier = Modifier.fillMaxWidth(),
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleMedium
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            uiState.topRoutes.forEach { route ->
+                RouteCard(route = route, onClick = { onNavigateToRouteDetail(route.id) })
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+        }
+
         Spacer(modifier = Modifier.height(16.dp))
 
         Row(modifier = Modifier.fillMaxWidth()) {
-
             SmallActionButton(
                 title = "Reportar",
                 icon = Icons.Default.AddAlert,
@@ -89,7 +99,6 @@ fun HomeScreen(
                 onClick = onNavigateToReport
             )
             Spacer(modifier = Modifier.width(16.dp))
-            // Botón Perfil
             SmallActionButton(
                 title = "Mi Perfil",
                 icon = Icons.Default.Person,
@@ -100,7 +109,6 @@ fun HomeScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Botón de Emergencia (SOS)
         Button(
             onClick = onNavigateToEmergency,
             modifier = Modifier
@@ -112,6 +120,37 @@ fun HomeScreen(
             Icon(Icons.Default.Warning, contentDescription = null, modifier = Modifier.size(30.dp))
             Spacer(modifier = Modifier.width(12.dp))
             Text("BOTÓN SOS / ACOMPÁÑAME", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+        }
+    }
+}
+
+@Composable
+fun RouteCard(route: SafeRoute, onClick: () -> Unit) {
+    ElevatedCard(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(route.nombre, fontWeight = FontWeight.Bold)
+                Text(
+                    "${route.categoria} • ${route.dificultad} • ${route.distanciaTexto}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray
+                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Star, contentDescription = null, tint = Color(0xFFFFC107), modifier = Modifier.size(18.dp))
+                Text(
+                    String.format("%.1f", route.recomendacion),
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(start = 4.dp)
+                )
+            }
         }
     }
 }

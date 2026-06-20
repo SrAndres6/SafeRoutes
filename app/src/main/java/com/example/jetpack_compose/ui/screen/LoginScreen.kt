@@ -1,18 +1,17 @@
 package com.example.jetpack_compose.ui.screen
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
-import androidx.compose.ui.platform.LocalContext
-import android.widget.Toast
+import com.example.jetpack_compose.ui.authViewModel
 
 @Composable
 fun LoginScreen(
@@ -22,7 +21,22 @@ fun LoginScreen(
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     val context = LocalContext.current
-    val auth = FirebaseAuth.getInstance()
+    val viewModel = authViewModel()
+    val uiState by viewModel.uiState.collectAsState()
+
+    LaunchedEffect(uiState.isSuccess) {
+        if (uiState.isSuccess) {
+            viewModel.clearState()
+            onLoginSuccess()
+        }
+    }
+
+    LaunchedEffect(uiState.error) {
+        uiState.error?.let {
+            Toast.makeText(context, "Error: $it", Toast.LENGTH_SHORT).show()
+            viewModel.clearState()
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -32,12 +46,12 @@ fun LoginScreen(
         verticalArrangement = Arrangement.Center
     ) {
         Text(
-            text = "SafeRoute IA",
+            text = "SafeRoute",
             style = MaterialTheme.typography.displaySmall,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary
         )
-        Text(text = "Inicia sesión para viajar seguro", fontSize = 16.sp, color = MaterialTheme.colorScheme.secondary)
+        Text(text = "Inicia sesión para explorar rutas seguras", fontSize = 16.sp, color = MaterialTheme.colorScheme.secondary)
 
         Spacer(modifier = Modifier.height(32.dp))
 
@@ -61,24 +75,16 @@ fun LoginScreen(
         Spacer(modifier = Modifier.height(24.dp))
 
         Button(
-            onClick = {
-                if (email.isNotEmpty() && password.isNotEmpty()) {
-                    auth.signInWithEmailAndPassword(email, password)
-                        .addOnCompleteListener { task ->
-                            if (task.isSuccessful) {
-                                onLoginSuccess()
-                            } else {
-                                Toast.makeText(context, "Error: ${task.exception?.message}", Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                } else {
-                    Toast.makeText(context, "Completa todos los campos", Toast.LENGTH_SHORT).show()
-                }
-            },
+            onClick = { viewModel.login(email, password) },
             modifier = Modifier.fillMaxWidth(),
+            enabled = !uiState.isLoading,
             shape = MaterialTheme.shapes.medium
         ) {
-            Text("Iniciar Sesión")
+            if (uiState.isLoading) {
+                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+            } else {
+                Text("Iniciar Sesión")
+            }
         }
 
         TextButton(onClick = onNavigateToRegister) {

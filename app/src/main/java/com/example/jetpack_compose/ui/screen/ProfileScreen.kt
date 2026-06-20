@@ -1,62 +1,53 @@
 package com.example.jetpack_compose.ui.screen
 
-import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.jetpack_compose.data.model.User
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
+import com.example.jetpack_compose.ui.profileViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ProfileScreen(onBack: () -> Unit) {
-    val db = FirebaseFirestore.getInstance()
-    val auth = FirebaseAuth.getInstance()
-    val context = LocalContext.current
-
-    // Estado para almacenar los datos del usuario
-    var userData by remember { mutableStateOf<User?>(null) }
-    var isLoading by remember { mutableStateOf(true) }
-
-    // Cargar datos al iniciar la pantalla
-    LaunchedEffect(Unit) {
-        val currentUserId = auth.currentUser?.uid
-        if (currentUserId != null) {
-            db.collection("users").document(currentUserId).get()
-                .addOnSuccessListener { document ->
-                    if (document.exists()) {
-                        userData = document.toObject(User::class.java)
-                    }
-                    isLoading = false
-                }
-                .addOnFailureListener { e ->
-                    Toast.makeText(context, "Error al cargar perfil", Toast.LENGTH_SHORT).show()
-                    isLoading = false
-                }
-        }
-    }
+fun ProfileScreen(
+    onBack: () -> Unit,
+    onLogout: () -> Unit,
+    onRouteClick: (String) -> Unit
+) {
+    val viewModel = profileViewModel()
+    val uiState by viewModel.uiState.collectAsState()
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("Configuración de Seguridad") })
+            TopAppBar(
+                title = { Text("Mi Perfil") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = {
+                        viewModel.logout()
+                        onLogout()
+                    }) {
+                        Icon(Icons.Default.Logout, contentDescription = "Cerrar sesión")
+                    }
+                }
+            )
         }
     ) { padding ->
-        if (isLoading) {
+        if (uiState.isLoading) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
             }
@@ -69,35 +60,45 @@ fun ProfileScreen(onBack: () -> Unit) {
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 item {
-                    // Info de Usuario
                     Surface(
                         modifier = Modifier.size(100.dp).clip(CircleShape),
                         color = MaterialTheme.colorScheme.secondaryContainer
                     ) {
                         Box(contentAlignment = Alignment.Center) {
-                            // Iniciales dinámicas
-                            val initials = userData?.name?.take(2)?.uppercase() ?: "U"
+                            val initials = uiState.user?.name?.take(2)?.uppercase() ?: "U"
                             Text(initials, fontSize = 32.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                     Spacer(modifier = Modifier.height(16.dp))
-
-                    // Nombre dinámico
                     Text(
-                        text = userData?.name ?: "Usuario",
+                        text = uiState.user?.name ?: "Usuario",
                         style = MaterialTheme.typography.headlineSmall
                     )
                     Text(
-                        text = userData?.email ?: "Sin correo",
+                        text = uiState.user?.email ?: "Sin correo",
                         color = MaterialTheme.colorScheme.primary
                     )
-
+                    Text(
+                        text = "Tipo: ${uiState.user?.tipoUsuario ?: "PEATON"}",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
                     Spacer(modifier = Modifier.height(24.dp))
                     HorizontalDivider()
                     Spacer(modifier = Modifier.height(16.dp))
+                    Text("Rutas favoritas", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                    Spacer(modifier = Modifier.height(8.dp))
                 }
 
-                // ... resto de los items (Contactos, etc)
+                if (uiState.favorites.isEmpty()) {
+                    item {
+                        Text("No tienes rutas favoritas aún", style = MaterialTheme.typography.bodySmall)
+                    }
+                } else {
+                    items(uiState.favorites) { route ->
+                        RouteCard(route = route, onClick = { onRouteClick(route.id) })
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                }
             }
         }
     }

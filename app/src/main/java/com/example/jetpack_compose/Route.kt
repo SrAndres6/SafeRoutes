@@ -15,13 +15,19 @@ data object HomeRoute
 data object ProfileRoute
 
 @Serializable
-data object MapRoute // Pantalla principal de navegación segura
+data object MapRoute
 
 @Serializable
-data object ReportRoute // Para reportar incidentes (Crowdsourcing)
+data object ReportRoute
 
 @Serializable
-data object EmergencyRoute // Función "Acompáñame" / SOS
+data object EmergencyRoute
 
 @Serializable
 data object FriendsRoute
+
+@Serializable
+data object RouteListRoute
+
+@Serializable
+data class RouteDetailNav(val routeId: String)

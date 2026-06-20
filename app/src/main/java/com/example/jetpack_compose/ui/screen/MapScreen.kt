@@ -9,7 +9,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.*
@@ -24,24 +23,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import com.example.jetpack_compose.data.remote.DirectionsService
+import com.example.jetpack_compose.ui.mapViewModel
+import com.example.jetpack_compose.ui.viewmodel.TravelMode
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.*
-import com.google.firebase.Timestamp
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.maps.android.PolyUtil
 import com.google.maps.android.compose.*
 import kotlinx.coroutines.launch
-import retrofit2.Retrofit
-import retrofit2.converter.gson.GsonConverterFactory
 import java.io.IOException
-
-enum class TravelMode(val value: String, val label: String) {
-    WALKING("walking", "Peatón"),
-    BICYCLING("bicycling", "Ciclista")
-}
 
 @SuppressLint("MissingPermission")
 @OptIn(ExperimentalMaterial3Api::class)
@@ -52,109 +41,13 @@ fun MapScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val viewModel = mapViewModel()
+    val uiState by viewModel.uiState.collectAsState()
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
     val geocoder = remember { Geocoder(context) }
-    val auth = FirebaseAuth.getInstance()
-    val db = FirebaseFirestore.getInstance()
 
-    // Retrofit Instance
-    val retrofit = remember {
-        Retrofit.Builder()
-            .baseUrl("https://maps.googleapis.com/")
-            .addConverterFactory(GsonConverterFactory.create())
-            .build()
-    }
-    val directionsService = remember { retrofit.create(DirectionsService::class.java) }
-    
-    val googleApiKey = "AIzaSyA1tWaQq6A5wVnHUUha_fJXsVomq4NRD1I"
-    
-    var originText by remember { mutableStateOf("SENA CTMA Antioquia") }
-    var destinationText by remember { mutableStateOf("Doce de Octubre Medellín") }
-    var selectedMode by remember { mutableStateOf(TravelMode.BICYCLING) }
-    
-    var originLatLng by remember { mutableStateOf<LatLng?>(null) }
-    var destinationLatLng by remember { mutableStateOf<LatLng?>(null) }
-    var pathPoints by remember { mutableStateOf<List<LatLng>>(emptyList()) }
-    var isGuiding by remember { mutableStateOf(false) }
-    var currentInstruction by remember { mutableStateOf("") }
-    var estimatedTime by remember { mutableStateOf("") }
-    var distanceText by remember { mutableStateOf("") }
-    var elevationGain by remember { mutableStateOf("") }
-    
     val cameraPositionState = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(LatLng(6.2442, -75.5812), 12f)
-    }
-
-    fun enviarAlertaFirestore(mensaje: String, tipo: String) {
-        val uid = auth.currentUser?.uid ?: return
-        val alerta = hashMapOf(
-            "fecha" to Timestamp.now(),
-            "mensaje" to mensaje,
-            "tipo" to tipo,
-            "usuarioId" to uid
-        )
-        db.collection("alertas").add(alerta)
-    }
-
-    fun guardarRuta() {
-        val uid = auth.currentUser?.uid ?: return
-        if (originLatLng == null || destinationLatLng == null) return
-        
-        val ruta = hashMapOf(
-            "nombre" to "Ruta a ${destinationText}",
-            "origen" to originText,
-            "destino" to destinationText,
-            "modo" to selectedMode.value,
-            "fecha" to Timestamp.now(),
-            "usuarioId" to uid
-        )
-        db.collection("rutas").add(ruta)
-            .addOnSuccessListener { Toast.makeText(context, "Ruta guardada", Toast.LENGTH_SHORT).show() }
-    }
-
-    fun calculateRoute() {
-        if (originLatLng == null || destinationLatLng == null) {
-            Toast.makeText(context, "Selecciona origen y destino", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        scope.launch {
-            try {
-                val origin = "${originLatLng!!.latitude},${originLatLng!!.longitude}"
-                val destination = "${destinationLatLng!!.latitude},${destinationLatLng!!.longitude}"
-                val response = directionsService.getDirections(origin, destination, googleApiKey, selectedMode.value)
-                
-                if (response.isSuccessful) {
-                    val directions = response.body()
-                    if (directions?.routes?.isNotEmpty() == true) {
-                        val route = directions.routes[0]
-                        pathPoints = PolyUtil.decode(route.overview_polyline.points)
-                        val leg = route.legs.getOrNull(0)
-                        distanceText = leg?.distance?.text ?: ""
-                        estimatedTime = leg?.duration?.text ?: ""
-                        
-                        if (selectedMode == TravelMode.BICYCLING) {
-                            val gain = (leg?.distance?.value ?: 0) / 100
-                            elevationGain = "+$gain m"
-                        } else {
-                            elevationGain = ""
-                        }
-                        
-                        currentInstruction = route.legs[0].steps[0].html_instructions.replace(Regex("<[^>]*>"), "")
-                        
-                        cameraPositionState.animate(
-                            CameraUpdateFactory.newCameraPosition(
-                                CameraPosition.builder().target(originLatLng!!).zoom(17f).tilt(45f).build()
-                            )
-                        )
-                    } else {
-                        Toast.makeText(context, "Error: ${directions?.status}", Toast.LENGTH_LONG).show()
-                    }
-                }
-            } catch (e: Exception) {
-                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
     }
 
     fun findLocation(query: String, isOrigin: Boolean) {
@@ -164,11 +57,16 @@ fun MapScreen(
             val addresses = geocoder.getFromLocationName(query, 1)
             if (!addresses.isNullOrEmpty()) {
                 val addr = addresses[0]
-                val latLng = LatLng(addr.latitude, addr.longitude)
-                if (isOrigin) originLatLng = latLng else destinationLatLng = latLng
-                cameraPositionState.move(CameraUpdateFactory.newLatLngZoom(latLng, 15f))
+                if (isOrigin) {
+                    viewModel.setOrigin(addr.latitude, addr.longitude)
+                } else {
+                    viewModel.setDestination(addr.latitude, addr.longitude)
+                }
+                scope.launch {
+                    cameraPositionState.move(CameraUpdateFactory.newLatLngZoom(LatLng(addr.latitude, addr.longitude), 15f))
+                }
             }
-        } catch (e: IOException) { }
+        } catch (_: IOException) { }
     }
 
     var hasLocationPermission by remember {
@@ -181,8 +79,34 @@ fun MapScreen(
     )
 
     LaunchedEffect(Unit) {
-        findLocation(originText, true)
-        findLocation(destinationText, false)
+        findLocation(uiState.originText, true)
+        findLocation(uiState.destinationText, false)
+    }
+
+    LaunchedEffect(uiState.error) {
+        uiState.error?.let {
+            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+            viewModel.clearError()
+        }
+    }
+
+    LaunchedEffect(uiState.saveSuccess) {
+        if (uiState.saveSuccess) {
+            Toast.makeText(context, "Ruta guardada en la comunidad", Toast.LENGTH_SHORT).show()
+            viewModel.clearSaveSuccess()
+        }
+    }
+
+    LaunchedEffect(uiState.pathPoints) {
+        if (uiState.pathPoints.isNotEmpty() && uiState.origin != null) {
+            cameraPositionState.animate(
+                CameraUpdateFactory.newCameraPosition(
+                    CameraPosition.builder()
+                        .target(LatLng(uiState.origin!!.lat, uiState.origin!!.lng))
+                        .zoom(17f).tilt(45f).build()
+                )
+            )
+        }
     }
 
     Scaffold(
@@ -209,12 +133,45 @@ fun MapScreen(
                 properties = MapProperties(isMyLocationEnabled = hasLocationPermission, isBuildingEnabled = true),
                 uiSettings = MapUiSettings(myLocationButtonEnabled = false, zoomControlsEnabled = false)
             ) {
-                originLatLng?.let { Marker(state = MarkerState(position = it), title = "Origen", icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)) }
-                destinationLatLng?.let { Marker(state = MarkerState(position = it), title = "Destino", icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)) }
-                if (pathPoints.isNotEmpty()) {
+                uiState.origin?.let {
+                    Marker(
+                        state = MarkerState(position = LatLng(it.lat, it.lng)),
+                        title = "Origen",
+                        icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)
+                    )
+                }
+                uiState.destination?.let {
+                    Marker(
+                        state = MarkerState(position = LatLng(it.lat, it.lng)),
+                        title = "Destino",
+                        icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)
+                    )
+                }
+                uiState.zonas.forEach { zona ->
+                    // Círculo de advertencia visual
+                    Circle(
+                        center = LatLng(zona.latitud, zona.longitud),
+                        radius = zona.radio.toDoubleOrNull() ?: 50.0,
+                        fillColor = Color.Red.copy(alpha = 0.2f),
+                        strokeColor = Color.Red,
+                        strokeWidth = 2f
+                    )
+                    
+                    Marker(
+                        state = MarkerState(position = LatLng(zona.latitud, zona.longitud)),
+                        title = "Riesgo: ${zona.nivelRiesgo}",
+                        snippet = zona.nombre,
+                        icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ORANGE)
+                    )
+                }
+                if (uiState.pathPoints.isNotEmpty()) {
                     Polyline(
-                        points = pathPoints,
-                        color = if (selectedMode == TravelMode.WALKING) Color(0xFF4CAF50) else Color(0xFF007AFF),
+                        points = uiState.pathPoints.map { LatLng(it.lat, it.lng) },
+                        color = when (uiState.selectedMode) {
+                            TravelMode.WALKING -> Color(0xFF4CAF50)
+                            TravelMode.BICYCLING -> Color(0xFF007AFF)
+                            TravelMode.HIKING -> Color(0xFF795548)
+                        },
                         width = 12f,
                         jointType = JointType.ROUND,
                         startCap = RoundCap(),
@@ -223,17 +180,15 @@ fun MapScreen(
                 }
             }
 
-            // Botón Mi Ubicación
             FloatingActionButton(
                 onClick = {
                     if (hasLocationPermission) {
                         fusedLocationClient.lastLocation.addOnSuccessListener { location ->
                             location?.let {
-                                val userPos = LatLng(it.latitude, it.longitude)
-                                originLatLng = userPos
-                                originText = "Mi ubicación"
+                                viewModel.setOrigin(it.latitude, it.longitude, "Mi ubicación")
+                                viewModel.updateLocation(it.latitude, it.longitude)
                                 scope.launch {
-                                    cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(userPos, 16f))
+                                    cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(LatLng(it.latitude, it.longitude), 16f))
                                 }
                             }
                         }
@@ -248,24 +203,32 @@ fun MapScreen(
                 Icon(Icons.Default.MyLocation, contentDescription = "Ubicación")
             }
 
-            if (isGuiding) {
+            if (uiState.isGuiding) {
                 Card(
                     modifier = Modifier.fillMaxWidth().padding(16.dp).align(Alignment.TopCenter),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(if (selectedMode == TravelMode.WALKING) Icons.AutoMirrored.Filled.DirectionsWalk else Icons.AutoMirrored.Filled.DirectionsBike, contentDescription = null, modifier = Modifier.size(32.dp))
+                        Icon(
+                            when (uiState.selectedMode) {
+                                TravelMode.WALKING -> Icons.AutoMirrored.Filled.DirectionsWalk
+                                TravelMode.BICYCLING -> Icons.AutoMirrored.Filled.DirectionsBike
+                                TravelMode.HIKING -> Icons.Default.Terrain
+                            },
+                            contentDescription = null,
+                            modifier = Modifier.size(32.dp)
+                        )
                         Spacer(modifier = Modifier.width(16.dp))
                         Column {
-                            Text(currentInstruction, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                            Text("Modo ${selectedMode.label}", style = MaterialTheme.typography.bodySmall)
+                            Text(uiState.currentInstruction, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Text("Modo ${uiState.selectedMode.label}", style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }
             }
 
-            if (!isGuiding) {
+            if (!uiState.isGuiding) {
                 Card(
                     modifier = Modifier.fillMaxWidth().padding(16.dp).align(Alignment.TopCenter),
                     shape = RoundedCornerShape(16.dp),
@@ -273,19 +236,27 @@ fun MapScreen(
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         OutlinedTextField(
-                            value = originText,
-                            onValueChange = { originText = it },
+                            value = uiState.originText,
+                            onValueChange = { viewModel.updateOriginText(it) },
                             label = { Text("Punto de Origen") },
                             modifier = Modifier.fillMaxWidth(),
-                            trailingIcon = { IconButton(onClick = { findLocation(originText, true) }) { Icon(Icons.Default.Search, null) } }
+                            trailingIcon = {
+                                IconButton(onClick = { findLocation(uiState.originText, true) }) {
+                                    Icon(Icons.Default.Search, null)
+                                }
+                            }
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         OutlinedTextField(
-                            value = destinationText,
-                            onValueChange = { destinationText = it },
+                            value = uiState.destinationText,
+                            onValueChange = { viewModel.updateDestinationText(it) },
                             label = { Text("Punto de Destino") },
                             modifier = Modifier.fillMaxWidth(),
-                            trailingIcon = { IconButton(onClick = { findLocation(destinationText, false) }) { Icon(Icons.Default.Search, null) } }
+                            trailingIcon = {
+                                IconButton(onClick = { findLocation(uiState.destinationText, false) }) {
+                                    Icon(Icons.Default.Search, null)
+                                }
+                            }
                         )
                     }
                 }
@@ -296,19 +267,46 @@ fun MapScreen(
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                            FilterChip(selected = selectedMode == TravelMode.WALKING, onClick = { selectedMode = TravelMode.WALKING }, label = { Text("Peatón") }, leadingIcon = { Icon(Icons.AutoMirrored.Filled.DirectionsWalk, null) })
-                            FilterChip(selected = selectedMode == TravelMode.BICYCLING, onClick = { selectedMode = TravelMode.BICYCLING }, label = { Text("Ciclista") }, leadingIcon = { Icon(Icons.AutoMirrored.Filled.DirectionsBike, null) })
+                            TravelMode.entries.forEach { mode ->
+                                FilterChip(
+                                    selected = uiState.selectedMode == mode,
+                                    onClick = { viewModel.setSelectedMode(mode) },
+                                    label = { Text(mode.label) },
+                                    leadingIcon = {
+                                        Icon(
+                                            when (mode) {
+                                                TravelMode.WALKING -> Icons.AutoMirrored.Filled.DirectionsWalk
+                                                TravelMode.BICYCLING -> Icons.AutoMirrored.Filled.DirectionsBike
+                                                TravelMode.HIKING -> Icons.Default.Terrain
+                                            },
+                                            null
+                                        )
+                                    }
+                                )
+                            }
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(onClick = { calculateRoute() }, modifier = Modifier.weight(1f)) { Text("Ver Ruta") }
-                            IconButton(onClick = { guardarRuta() }, modifier = Modifier.background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(8.dp))) { Icon(Icons.Default.Save, null) }
-                        }
-                        if (pathPoints.isNotEmpty()) {
                             Button(
-                                onClick = { 
-                                    isGuiding = true
-                                    enviarAlertaFirestore("Iniciando viaje a ${destinationText}", "VIAJE_INICIADO")
-                                },
+                                onClick = { viewModel.calculateRoute() },
+                                modifier = Modifier.weight(1f),
+                                enabled = !uiState.isLoading
+                            ) {
+                                if (uiState.isLoading) {
+                                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                } else {
+                                    Text("Ver Ruta")
+                                }
+                            }
+                            IconButton(
+                                onClick = { viewModel.saveRoute() },
+                                modifier = Modifier.background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(8.dp))
+                            ) {
+                                Icon(Icons.Default.Save, null)
+                            }
+                        }
+                        if (uiState.pathPoints.isNotEmpty()) {
+                            Button(
+                                onClick = { viewModel.startGuiding() },
                                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
                             ) {
@@ -325,16 +323,15 @@ fun MapScreen(
                     Column(modifier = Modifier.padding(20.dp)) {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Column {
-                                Text(estimatedTime, fontWeight = FontWeight.ExtraBold, fontSize = 24.sp, color = Color(0xFF2E7D32))
-                                Text("$distanceText • $elevationGain", color = Color.Gray, fontSize = 14.sp)
+                                Text(uiState.estimatedTime, fontWeight = FontWeight.ExtraBold, fontSize = 24.sp, color = Color(0xFF2E7D32))
+                                Text("${uiState.distanceText} • ${uiState.elevationGain}", color = Color.Gray, fontSize = 14.sp)
                             }
                             Button(
-                                onClick = { 
-                                    isGuiding = false 
-                                    pathPoints = emptyList()
-                                    enviarAlertaFirestore("Viaje finalizado en ${destinationText}", "VIAJE_FINALIZADO")
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.error)
+                                onClick = { viewModel.stopGuiding() },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                                    contentColor = MaterialTheme.colorScheme.error
+                                )
                             ) {
                                 Text("Terminar")
                             }

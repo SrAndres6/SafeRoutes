@@ -4,14 +4,18 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import com.google.firebase.FirebaseApp
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.toRoute
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import com.example.jetpack_compose.ui.screen.*
 import com.example.jetpack_compose.ui.theme.Jetpack_composeTheme
+import com.example.jetpack_compose.worker.SyncReportWorker
+import com.google.firebase.FirebaseApp
 
 @Composable
 fun AppNavigation() {
@@ -20,24 +24,22 @@ fun AppNavigation() {
 
     NavHost(
         navController = navController,
-        startDestination = LoginRoute // Empezamos por el Login
+        startDestination = LoginRoute
     ) {
-        // Pantalla de Login
         composable<LoginRoute> {
             LoginScreen(
-                onLoginSuccess = { 
+                onLoginSuccess = {
                     navController.navigate(HomeRoute) {
-                        popUpTo(LoginRoute) { inclusive = true } // Limpiar historial
+                        popUpTo(LoginRoute) { inclusive = true }
                     }
                 },
                 onNavigateToRegister = { navController.navigate(RegisterRoute) }
             )
         }
 
-        // Pantalla de Registro
         composable<RegisterRoute> {
             RegisterScreen(
-                onRegisterSuccess = { 
+                onRegisterSuccess = {
                     navController.navigate(HomeRoute) {
                         popUpTo(LoginRoute) { inclusive = true }
                     }
@@ -46,18 +48,31 @@ fun AppNavigation() {
             )
         }
 
-        // Pantalla Principal (Dashboard)
         composable<HomeRoute> {
             HomeScreen(
                 onNavigateToMap = { navController.navigate(MapRoute) },
                 onNavigateToReport = { navController.navigate(ReportRoute) },
                 onNavigateToEmergency = { navController.navigate(EmergencyRoute) },
-                onNavigateToProfile = { navController.navigate(ProfileRoute) }
+                onNavigateToProfile = { navController.navigate(ProfileRoute) },
+                onNavigateToRoutes = { navController.navigate(RouteListRoute) },
+                onNavigateToRouteDetail = { routeId ->
+                    navController.navigate(RouteDetailNav(routeId))
+                }
             )
         }
 
         composable<ProfileRoute> {
-            ProfileScreen(onBack = { navController.popBackStack() })
+            ProfileScreen(
+                onBack = { navController.popBackStack() },
+                onLogout = {
+                    navController.navigate(LoginRoute) {
+                        popUpTo(HomeRoute) { inclusive = true }
+                    }
+                },
+                onRouteClick = { routeId ->
+                    navController.navigate(RouteDetailNav(routeId))
+                }
+            )
         }
 
         composable<MapRoute> {
@@ -75,6 +90,23 @@ fun AppNavigation() {
             ReportScreen(onBack = { navController.popBackStack() })
         }
 
+        composable<RouteListRoute> {
+            RouteListScreen(
+                onBack = { navController.popBackStack() },
+                onRouteClick = { routeId ->
+                    navController.navigate(RouteDetailNav(routeId))
+                }
+            )
+        }
+
+        composable<RouteDetailNav> { backStackEntry ->
+            val args = backStackEntry.toRoute<RouteDetailNav>()
+            RouteDetailScreen(
+                routeId = args.routeId,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
         composable<EmergencyRoute> {
             Toast.makeText(context, "¡ALERTA SOS ENVIADA!", Toast.LENGTH_LONG).show()
             navController.popBackStack()
@@ -86,6 +118,11 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         FirebaseApp.initializeApp(this)
+
+        WorkManager.getInstance(this).enqueue(
+            OneTimeWorkRequestBuilder<SyncReportWorker>().build()
+        )
+
         setContent {
             Jetpack_composeTheme {
                 AppNavigation()

@@ -11,7 +11,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Report
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,54 +20,67 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.example.jetpack_compose.ui.reportViewModel
+import com.example.jetpack_compose.util.Constants
 import com.google.android.gms.location.LocationServices
-import com.google.firebase.Timestamp
-import com.google.firebase.firestore.FirebaseFirestore
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReportScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-    val db = FirebaseFirestore.getInstance()
+    val viewModel = reportViewModel()
+    val uiState by viewModel.uiState.collectAsState()
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
-    
-    var nombreZona by remember { mutableStateOf("") }
-    var nivelRiesgo by remember { mutableStateOf("Bajo") }
-    var radio by remember { mutableStateOf("50") }
-    var latitud by remember { mutableStateOf("") }
-    var longitud by remember { mutableStateOf("") }
-    var isSaving by remember { mutableStateOf(false) }
 
-    val hasLocationPermission = ContextCompat.checkSelfPermission(
-        context, Manifest.permission.ACCESS_FINE_LOCATION
-    ) == PackageManager.PERMISSION_GRANTED
+    var expanded by remember { mutableStateOf(false) }
 
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
         onResult = { isGranted ->
             if (isGranted) {
-                // Obtener ubicación
+                fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+                    location?.let { viewModel.setLocation(it.latitude, it.longitude) }
+                }
             }
         }
     )
 
-    fun obtenerUbicacionActual() {
-        if (hasLocationPermission) {
+    fun obtenerUbicacion() {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
+            == PackageManager.PERMISSION_GRANTED
+        ) {
             fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-                location?.let {
-                    latitud = it.latitude.toString()
-                    longitud = it.longitude.toString()
-                }
+                location?.let { viewModel.setLocation(it.latitude, it.longitude) }
             }
         } else {
             launcher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
         }
     }
 
+    LaunchedEffect(uiState.message) {
+        uiState.message?.let {
+            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+            onBack()
+        }
+    }
+
+    LaunchedEffect(uiState.error) {
+        uiState.error?.let {
+            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val tiposReporte = listOf(
+        Constants.ReporteTipo.CAMINO_DANADO to "Camino dañado",
+        Constants.ReporteTipo.SENDERO_BLOQUEADO to "Sendero bloqueado",
+        Constants.ReporteTipo.CAMBIO_RUTA to "Cambio en el recorrido",
+        Constants.ReporteTipo.CONDICION_ACTUAL to "Condición actual del camino"
+    )
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Reportar Zona Peligrosa") },
+                title = { Text("Reporte Comunitario") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
@@ -85,43 +98,59 @@ fun ReportScreen(onBack: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                "Información de la Zona",
+                "Comparte información sobre las rutas",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
-            
-            Spacer(modifier = Modifier.height(16.dp))
-
-            OutlinedTextField(
-                value = nombreZona,
-                onValueChange = { nombreZona = it },
-                label = { Text("Nombre de la zona / Incidente") },
-                modifier = Modifier.fillMaxWidth()
-            )
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            Text("Nivel de Riesgo", modifier = Modifier.fillMaxWidth())
-            val riesgos = listOf("Bajo", "Medio", "Alto", "Crítico")
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                riesgos.forEach { riesgo ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(
-                            selected = (nivelRiesgo == riesgo),
-                            onClick = { nivelRiesgo = riesgo }
+            ExposedDropdownMenuBox(
+                expanded = expanded,
+                onExpandedChange = { expanded = it }
+            ) {
+                OutlinedTextField(
+                    value = uiState.selectedRouteName.ifEmpty { "Seleccionar ruta" },
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Ruta") },
+                    modifier = Modifier.fillMaxWidth().menuAnchor(),
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) }
+                )
+                ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                    uiState.routes.forEach { route ->
+                        DropdownMenuItem(
+                            text = { Text(route.nombre) },
+                            onClick = {
+                                viewModel.selectRoute(route.id, route.nombre)
+                                expanded = false
+                            }
                         )
-                        Text(riesgo, style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            Text("Tipo de reporte", modifier = Modifier.fillMaxWidth(), fontWeight = FontWeight.Medium)
+            tiposReporte.forEach { (value, label) ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(
+                        selected = uiState.tipo == value,
+                        onClick = { viewModel.setTipo(value) }
+                    )
+                    Text(label)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             OutlinedTextField(
-                value = radio,
-                onValueChange = { radio = it },
-                label = { Text("Radio de influencia (metros)") },
-                modifier = Modifier.fillMaxWidth()
+                value = uiState.descripcion,
+                onValueChange = { viewModel.setDescripcion(it) },
+                label = { Text("Descripción del reporte") },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 3
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -129,65 +158,38 @@ fun ReportScreen(onBack: () -> Unit) {
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
                     OutlinedTextField(
-                        value = latitud,
-                        onValueChange = { latitud = it },
+                        value = uiState.latitud,
+                        onValueChange = {},
+                        readOnly = true,
                         label = { Text("Latitud") },
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
-                        value = longitud,
-                        onValueChange = { longitud = it },
+                        value = uiState.longitud,
+                        onValueChange = {},
+                        readOnly = true,
                         label = { Text("Longitud") },
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
-                IconButton(
-                    onClick = { obtenerUbicacionActual() },
-                    modifier = Modifier.padding(start = 8.dp)
-                ) {
+                IconButton(onClick = { obtenerUbicacion() }) {
                     Icon(Icons.Default.LocationOn, contentDescription = "Mi ubicación", tint = MaterialTheme.colorScheme.primary)
                 }
             }
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            if (isSaving) {
+            if (uiState.isSaving) {
                 CircularProgressIndicator()
             } else {
                 Button(
-                    onClick = {
-                        if (nombreZona.isNotEmpty() && latitud.isNotEmpty() && longitud.isNotEmpty()) {
-                            isSaving = true
-                            val zona = hashMapOf(
-                                "nombre" to nombreZona,
-                                "nivelRiesgo" to nivelRiesgo,
-                                "radio" to radio,
-                                "latitud" to latitud,
-                                "longitud" to longitud,
-                                "ultimaActualizacion" to Timestamp.now()
-                            )
-                            
-                            db.collection("zonas_peligrosas")
-                                .add(zona)
-                                .addOnSuccessListener {
-                                    Toast.makeText(context, "Zona reportada con éxito", Toast.LENGTH_SHORT).show()
-                                    onBack()
-                                }
-                                .addOnFailureListener { e ->
-                                    isSaving = false
-                                    Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
-                                }
-                        } else {
-                            Toast.makeText(context, "Por favor completa los campos obligatorios", Toast.LENGTH_SHORT).show()
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    onClick = { viewModel.submitReport() },
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Icon(Icons.Default.Warning, contentDescription = null)
+                    Icon(Icons.Default.Report, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Guardar Zona Peligrosa")
+                    Text("Enviar reporte comunitario")
                 }
             }
         }
