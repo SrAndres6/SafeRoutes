@@ -17,7 +17,8 @@ import com.example.jetpack_compose.util.Constants
 @Composable
 fun RouteListScreen(
     onBack: () -> Unit,
-    onRouteClick: (String) -> Unit
+    onRouteClick: (String) -> Unit,
+    onNavigateToMap: (String) -> Unit
 ) {
     val viewModel = routeListViewModel()
     val uiState by viewModel.uiState.collectAsState()
@@ -69,7 +70,11 @@ fun RouteListScreen(
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(uiState.routes) { route ->
-                        RouteCard(route = route, onClick = { onRouteClick(route.id) })
+                        RouteCard(
+                            route = route,
+                            onClick = { onRouteClick(route.id) },
+                            onMapClick = { onNavigateToMap(route.id) }
+                        )
                     }
                 }
             }

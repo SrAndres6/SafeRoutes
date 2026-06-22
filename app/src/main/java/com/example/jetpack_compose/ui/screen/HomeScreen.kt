@@ -125,7 +125,11 @@ fun HomeScreen(
 }
 
 @Composable
-fun RouteCard(route: SafeRoute, onClick: () -> Unit) {
+fun RouteCard(
+    route: SafeRoute,
+    onClick: () -> Unit,
+    onMapClick: (() -> Unit)? = null
+) {
     ElevatedCard(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
@@ -144,6 +148,16 @@ fun RouteCard(route: SafeRoute, onClick: () -> Unit) {
                 )
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
+                if (onMapClick != null) {
+                    IconButton(onClick = onMapClick) {
+                        Icon(
+                            Icons.Default.Map,
+                            contentDescription = "Ver en mapa",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
                 Icon(Icons.Default.Star, contentDescription = null, tint = Color(0xFFFFC107), modifier = Modifier.size(18.dp))
                 Text(
                     String.format("%.1f", route.recomendacion),

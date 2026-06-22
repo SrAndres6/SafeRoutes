@@ -15,7 +15,7 @@ data object HomeRoute
 data object ProfileRoute
 
 @Serializable
-data object MapRoute
+data class MapRoute(val routeId: String? = null)
 
 @Serializable
 data object ReportRoute

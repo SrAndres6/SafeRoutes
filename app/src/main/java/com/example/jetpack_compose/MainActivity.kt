@@ -50,7 +50,7 @@ fun AppNavigation() {
 
         composable<HomeRoute> {
             HomeScreen(
-                onNavigateToMap = { navController.navigate(MapRoute) },
+                onNavigateToMap = { navController.navigate(MapRoute()) },
                 onNavigateToReport = { navController.navigate(ReportRoute) },
                 onNavigateToEmergency = { navController.navigate(EmergencyRoute) },
                 onNavigateToProfile = { navController.navigate(ProfileRoute) },
@@ -75,8 +75,10 @@ fun AppNavigation() {
             )
         }
 
-        composable<MapRoute> {
+        composable<MapRoute> { backStackEntry ->
+            val args = backStackEntry.toRoute<MapRoute>()
             MapScreen(
+                routeId = args.routeId,
                 onBack = { navController.popBackStack() },
                 onNavigateToFriends = { navController.navigate(FriendsRoute) }
             )
@@ -95,6 +97,9 @@ fun AppNavigation() {
                 onBack = { navController.popBackStack() },
                 onRouteClick = { routeId ->
                     navController.navigate(RouteDetailNav(routeId))
+                },
+                onNavigateToMap = { routeId ->
+                    navController.navigate(MapRoute(routeId))
                 }
             )
         }

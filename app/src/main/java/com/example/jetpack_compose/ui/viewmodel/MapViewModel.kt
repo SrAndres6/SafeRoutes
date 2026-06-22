@@ -217,6 +217,37 @@ class MapViewModel(
         _uiState.value = _uiState.value.copy(saveSuccess = false)
     }
 
+    fun loadRoute(routeId: String) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true)
+            val route = routeRepository.getRouteById(routeId)
+            if (route != null) {
+                val points = PolyUtil.decode(route.polyline)
+                    .map { LatLngData(it.latitude, it.longitude) }
+                
+                val mode = TravelMode.entries.find { it.value == route.modoTransporte } 
+                    ?: TravelMode.BICYCLING
+
+                _uiState.value = _uiState.value.copy(
+                    origin = LatLngData(route.origenLat, route.origenLng),
+                    originText = route.origenNombre,
+                    destination = LatLngData(route.destinoLat, route.destinoLng),
+                    destinationText = route.destinoNombre,
+                    pathPoints = points,
+                    polylineEncoded = route.polyline,
+                    selectedMode = mode,
+                    distanceText = route.distanciaTexto,
+                    distanceMeters = route.distanciaMetros,
+                    durationMinutes = route.tiempoMinutos,
+                    estimatedTime = route.tiempoTexto,
+                    isLoading = false
+                )
+            } else {
+                _uiState.value = _uiState.value.copy(isLoading = false, error = "Ruta no encontrada")
+            }
+        }
+    }
+
     class Factory(
         private val directionsService: DirectionsService,
         private val routeRepository: RouteRepository,

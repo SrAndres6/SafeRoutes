@@ -36,6 +36,7 @@ import java.io.IOException
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MapScreen(
+    routeId: String? = null,
     onBack: () -> Unit,
     onNavigateToFriends: () -> Unit
 ) {
@@ -48,6 +49,12 @@ fun MapScreen(
 
     val cameraPositionState = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(LatLng(6.2442, -75.5812), 12f)
+    }
+
+    LaunchedEffect(routeId) {
+        routeId?.let {
+            viewModel.loadRoute(it)
+        }
     }
 
     fun findLocation(query: String, isOrigin: Boolean) {
